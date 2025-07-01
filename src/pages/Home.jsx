@@ -5,6 +5,8 @@ import QueryCard from '../components/QueryCard';
 import { Link } from 'react-router-dom';
 import Lottie from 'lottie-react';
 import thinkingAnimation from '../assets/thinkingAnimation.json';
+const BASE_URL = process.env.REACT_APP_BACKEND_URL;
+
 
 function Home() {
   const [prompt, setPrompt] = useState('');
@@ -51,11 +53,11 @@ function Home() {
     setPrompt('');
 
     try {
-      const res = await axios.post('http://localhost:8000/api/generate-sql', {
+      const res = await axios.post(`${BASE_URL}/api/generate-sql`, {
         prompt: userMessage.prompt,
       });
 
-      const runRes = await axios.post('http://localhost:8000/api/execute-sql', {
+      const runRes = await axios.post(`${BASE_URL}/api/execute-sql`, {
         sql: res.data.sql,
       });
 
@@ -91,7 +93,7 @@ function Home() {
     if (!editingSql.trim()) return;
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:8000/api/execute-sql', {
+      const res = await axios.post(`${BASE_URL}/api/execute-sql`, {
         sql: editingSql,
       });
       setRows(res.data.rows || []);
@@ -103,12 +105,12 @@ function Home() {
 
   const loadHistory = async () => {
     try {
-      const res = await axios.get(`http://localhost:8000/api/query-history/?offset=${offset}&limit=5`);
+      const res = await axios.get(`${BASE_URL}/api/query-history/?offset=${offset}&limit=5`);
 
       const newHistory = await Promise.all(
         res.data.history.map(async (item) => {
           try {
-            const result = await axios.post('http://localhost:8000/api/execute-sql', {
+            const result = await axios.post(`${BASE_URL}/api/execute-sql`, {
               sql: item.generated_sql,
             });
             return { ...item, rows: result.data.rows };

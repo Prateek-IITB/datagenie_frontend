@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+const BASE_URL = process.env.REACT_APP_BACKEND_URL;
 
 function SchemaEditor() {
   const [schema, setSchema] = useState([]);
@@ -10,7 +11,7 @@ function SchemaEditor() {
   useEffect(() => {
     const refreshThenFetch = async () => {
       try {
-        await axios.post('http://localhost:8000/api/schema/refresh', {
+        await axios.post(`${BASE_URL}/api/schema/refresh`, {
           user_id: 1,
         });
         await fetchSchema();
@@ -25,7 +26,7 @@ function SchemaEditor() {
 
   const fetchSchema = async () => {
     try {
-      const res = await axios.get('http://localhost:8000/api/schema', {
+      const res = await axios.get(`${BASE_URL}/api/schema`, {
         params: { user_id: 1 },
       });
       setSchema(res.data.schema || []);
@@ -53,7 +54,7 @@ function SchemaEditor() {
         description: description || '',
       }));
 
-      await axios.post('http://localhost:8000/api/schema/save-descriptions', {
+      await axios.post('https://datagenie-backend-3.onrender.com/api/schema/save-descriptions', {
         user_id: 1,
         data: payload,
       });
