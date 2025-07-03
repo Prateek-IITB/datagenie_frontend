@@ -54,7 +54,7 @@ function SchemaEditor() {
         description: description || '',
       }));
 
-      await axios.post('https://datagenie-backend-3.onrender.com/api/schema/save-descriptions', {
+      await axios.post(`${BASE_URL}/api/schema/save-descriptions`, {
         user_id: 1,
         data: payload,
       });
