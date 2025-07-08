@@ -1,20 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import Header from '../components/Header';
+const user = JSON.parse(localStorage.getItem("datagenie_user"));
+const isViewer = user?.role === "viewer";
+
+
 const BASE_URL = process.env.REACT_APP_BACKEND_URL;
+
+const currentUser = JSON.parse(localStorage.getItem('datagenie_user'));
+const user_id = currentUser?.id;
+
 
 function SchemaEditor() {
   const [schema, setSchema] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     const refreshThenFetch = async () => {
       try {
+        const user = JSON.parse(localStorage.getItem('datagenie_user'));
+        if (!user) return;
+
         await axios.post(`${BASE_URL}/api/schema/refresh`, {
-          user_id: 1,
+          user_id: user.id,
         });
-        await fetchSchema();
+
+        await fetchSchema(user.id);
       } catch (err) {
         console.error('Error refreshing schema:', err);
         alert('Failed to refresh schema');
@@ -24,16 +36,18 @@ function SchemaEditor() {
     refreshThenFetch();
   }, []);
 
-  const fetchSchema = async () => {
-    try {
-      const res = await axios.get(`${BASE_URL}/api/schema`, {
-        params: { user_id: 1 },
-      });
-      setSchema(res.data.schema || []);
-    } catch (err) {
-      console.error('Error fetching schema:', err);
-    }
-  };
+
+  const fetchSchema = async (user_id) => {
+  try {
+    const res = await axios.get(`${BASE_URL}/api/schema`, {
+      params: { user_id },
+    });
+    setSchema(res.data.schema || []);
+  } catch (err) {
+    console.error('Error fetching schema:', err);
+  }
+};
+
 
   const handleDescriptionChange = (table_name, column_name, value) => {
     setSchema(prev =>
@@ -55,7 +69,7 @@ function SchemaEditor() {
       }));
 
       await axios.post(`${BASE_URL}/api/schema/save-descriptions`, {
-        user_id: 1,
+        params: {user_id},
         data: payload,
       });
       alert('Descriptions saved!');
@@ -73,34 +87,10 @@ function SchemaEditor() {
   }, {});
 
   return (
-    <div className={darkMode ? 'dark' : ''}>
+    <div className="dark">
       {/* Sticky Header */}
-      <header className="sticky top-0 bg-white dark:bg-gray-900 shadow-md z-50 flex justify-between items-center px-6 py-4">
-        <div className="text-xl font-bold text-gray-800 dark:text-gray-100">DataGenie</div>
-
-        <div className="flex items-center space-x-4">
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={darkMode}
-              onChange={() => setDarkMode(!darkMode)}
-              className="sr-only peer"
-            />
-            <div className="w-14 h-8 bg-gray-300 rounded-full peer-checked:bg-gray-700 transition duration-300 relative">
-              <span className="absolute left-1 top-1 w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 peer-checked:translate-x-6 flex items-center justify-center text-sm">
-                {darkMode ? '🌙' : '🌞'}
-              </span>
-            </div>
-          </label>
-
-          <Link
-            to="/"
-            className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg text-sm transition"
-          >
-            Back to Query
-          </Link>
-        </div>
-      </header>
+ 
+      <Header />
 
       {/* Body */}
       <div className="min-h-screen bg-gradient-to-br from-gray-100 to-white dark:from-gray-900 dark:to-gray-800 px-6 py-10 font-sans text-gray-800 dark:text-gray-100">
@@ -144,15 +134,17 @@ function SchemaEditor() {
             </div>
           ))}
 
-          <div className="text-right">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-gray-700 hover:bg-gray-800 text-white px-5 py-2 rounded-md"
-            >
-              {saving ? 'Saving...' : 'Save Descriptions'}
-            </button>
-          </div>
+           {!isViewer && (
+            <div className="text-right">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="bg-gray-700 hover:bg-gray-800 text-white px-5 py-2 rounded-md"
+              >
+                {saving ? 'Saving...' : 'Save Descriptions'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,21 +1,42 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
-// 🔁 Import your two pages
-import Home from './pages/Home'; // Your existing main UI file
-import SchemaEditor from './pages/SchemaEditor'; // Schema description page
+// 🔁 Import your pages
+import Home from './pages/Home';
+import SchemaEditor from './pages/SchemaEditor';
+import Login from './pages/Login';
+
+// ✅ NEW: Import ProtectedRoute
+import ProtectedRoute from './components/ProtectedRoute';
+
 
 
 function App() {
   return (
     <Router>
       <Routes>
+        {/* ✅ Protected: Main query UI */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* ✅ Homepage with SQL generator */}
-        <Route path="/" element={<Home />} />
+        {/* ✅ Protected: Schema description */}
+        <Route
+          path="/schema"
+          element={
+            <ProtectedRoute>
+              <SchemaEditor />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* ✅ New schema editor page */}
-        <Route path="/schema" element={<SchemaEditor />} />
+        {/* ✅ Public: Login page */}
+        <Route path="/login" element={<Login />} />
       </Routes>
     </Router>
   );
