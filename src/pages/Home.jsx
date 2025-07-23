@@ -6,9 +6,7 @@ import { Link } from 'react-router-dom';
 import Lottie from 'lottie-react';
 import thinkingAnimation from '../assets/thinkingAnimation.json';
 import { toast, Toaster } from 'react-hot-toast';
-import Header from '../components/Header';
-// import bgImage from '../assets/background_image.jpeg';
-
+import Sidebar from '../components/Sidebar/Sidebar';
 
 const BASE_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -23,7 +21,11 @@ function Home() {
   const [offset, setOffset] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
   const [followUpContext, setFollowUpContext] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const endOfMessagesRef = useRef(null);
+
+  const user = JSON.parse(localStorage.getItem('datagenie_user') || '{}');
+  console.log("use rin Home.jsx", user);
 
   const scrollToBottom = () => {
     if (endOfMessagesRef.current) {
@@ -42,7 +44,6 @@ function Home() {
     setHasStarted(true);
     setLoading(true);
 
-    const user = JSON.parse(localStorage.getItem('datagenie_user'));
     const user_id = user?.id;
 
     const userMessage = {
@@ -67,61 +68,18 @@ function Home() {
 
       const { requires_schema, needs_sql, intent, explanation, sql, message } = res.data;
 
-      // 🧠 Case 1: No schema required → just show message
-      if (!requires_schema) {
+      if (!requires_schema || (requires_schema && !needs_sql)) {
         const newContextEntry = { prompt, message };
-        if (intent === 'fresh') {
-          setFollowUpContext([newContextEntry]);
-        } else {
-          setFollowUpContext((prev) => [...prev, newContextEntry]);
-        }
-
+        setFollowUpContext(intent === 'fresh' ? [newContextEntry] : [...followUpContext, newContextEntry]);
         setHistory((prev) =>
           prev.map((item) =>
-            item.id === userMessage.id
-              ? {
-                  ...item,
-                  explanation: message,
-                  generated_sql: '',
-                  rows: [],
-                  loading: false,
-                }
-              : item
+            item.id === userMessage.id ? { ...item, explanation: message, generated_sql: '', rows: [], loading: false } : item
           )
         );
-
         setLoading(false);
         return;
       }
 
-      // 🧠 Case 2: Schema needed but no SQL → show explanation only
-      if (requires_schema && !needs_sql) {
-        const newContextEntry = { prompt, message };
-        if (intent === 'fresh') {
-          setFollowUpContext([newContextEntry]);
-        } else {
-          setFollowUpContext((prev) => [...prev, newContextEntry]);
-        }
-
-        setHistory((prev) =>
-          prev.map((item) =>
-            item.id === userMessage.id
-              ? {
-                  ...item,
-                  explanation: message,
-                  generated_sql: '',
-                  rows: [],
-                  loading: false,
-                }
-              : item
-          )
-        );
-
-        setLoading(false);
-        return;
-      }
-
-      // 📡 Case 3: Full SQL generation and execution
       const runRes = await axios.post(`${BASE_URL}/api/execute-sql`, {
         sql,
         user_id: user_id,
@@ -140,11 +98,7 @@ function Home() {
       );
 
       const newContextEntry = { prompt, sql, result: runRes.data.rows || [] };
-      if (intent === 'fresh') {
-        setFollowUpContext([newContextEntry]);
-      } else {
-        setFollowUpContext((prev) => [...prev, newContextEntry]);
-      }
+      setFollowUpContext(intent === 'fresh' ? [newContextEntry] : [...followUpContext, newContextEntry]);
     } catch (err) {
       console.error('❌ Failed to process query:', err);
       setHistory((prev) =>
@@ -160,17 +114,13 @@ function Home() {
     setLoading(false);
   };
 
-
-
-
   const handleReRun = async (editedSql, oldId) => {
     if (!editedSql.trim()) return;
     setLoading(true);
     try {
-      const user = JSON.parse(localStorage.getItem("datagenie_user") || "{}");
       const res = await axios.post(`${BASE_URL}/api/execute-sql`, {
-      sql: editedSql,
-      user_id: user?.id,
+        sql: editedSql,
+        user_id: user?.id,
       });
       const newId = Date.now();
       const oldItem = history.find((item) => item.id === oldId);
@@ -195,13 +145,13 @@ function Home() {
     setLoading(false);
   };
 
-
   return (
-    
-    <div className="dark hide-scrollbar h-screen flex flex-col">
+    <div className="dark hide-scrollbar h-screen flex relative overflow-hidden">
+      {/* Sidebar */}
+      <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} userRole={user?.role} />
 
-      <Header />
-      <div className="hide-scrollbar overflow-auto flex-grow bg-gradient-to-br from-gray-100 to-white dark:from-gray-900 dark:to-gray-800 px-6 py-10 font-sans text-gray-800 dark:text-gray-100 relative">
+      {/* Main Content */}
+      <div className={`hide-scrollbar overflow-auto flex-grow bg-gradient-to-br from-gray-100 to-white dark:from-gray-900 dark:to-gray-800 px-6 py-10 font-sans text-gray-800 dark:text-gray-100 relative transition-all duration-300 ${sidebarOpen && window.innerWidth >= 768 ? 'ml-64' : 'ml-16'} md:ml-0`}>        
         <div className={`max-w-6xl mx-auto space-y-8 ${hasStarted ? 'pb-36 max-h-[80vh]' : 'h-[70vh] flex flex-col justify-center'}`}>
           {!hasStarted && (
             <h2 className="text-4xl font-bold text-center text-gray-800 dark:text-gray-100">
@@ -209,9 +159,16 @@ function Home() {
             </h2>
           )}
 
-          <div className={`${hasStarted ? 'fixed bottom-0 left-0 w-full px-6 py-6 backdrop-blur-md bg-transparent z-50' : 'mt-6 flex justify-center items-center'}`}>
+          <div
+            className={`transition-all px-6 py-6 backdrop-blur-md bg-transparent z-50 ${
+              hasStarted ? 'fixed bottom-0 right-0' : 'mt-6 flex justify-center items-center w-full'
+            }`}
+            style={{
+              left: hasStarted ? (sidebarOpen && window.innerWidth >= 768 ? '16rem' : '4rem') : undefined,
+            }}
+          >
             <div className="w-full max-w-6xl mx-auto px-6">
-              <div className="relative w-full ">
+              <div className="relative w-full">
                 <input
                   type="text"
                   value={prompt}
@@ -220,15 +177,7 @@ function Home() {
                   placeholder="Ask me anything"
                   className="w-full px-4 py-3 pr-12 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded-xl shadow-sm focus:ring-gray-500 focus:outline-none"
                 />
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
-                >
-                  
-                </button>
               </div>
-
             </div>
           </div>
 
@@ -252,7 +201,7 @@ function Home() {
                   </div>
                 ) : q.failed ? (
                   <div className="flex justify-start">
-                    <div className="bg-gray-800  text-gray-100 dark:text-white px-5 py-3 text-[17px] rounded-xl max-w-xl">
+                    <div className="bg-gray-800 text-gray-100 px-5 py-3 text-[17px] rounded-xl max-w-xl">
                       Unable to get your data, can you be more specific of what data do you want?
                     </div>
                   </div>
@@ -269,21 +218,18 @@ function Home() {
                     onReRun={() => handleReRun(editingSqlMap[q.id], q.id)}
                   />
                 ) : (
-                  // 👇 Non-data response (just show the explanation in a message bubble)
                   <div className="flex justify-start">
-                    <div className="bg-gray-800  text-gray-100 px-5 py-3 rounded-xl shadow max-w-xl text-[17px] ">
-                     {q.explanation}
+                    <div className="bg-gray-800 text-gray-100 px-5 py-3 rounded-xl shadow max-w-xl text-[17px]">
+                      {q.explanation}
                     </div>
                   </div>
                 )}
-
               </div>
             ))}
             <div className="pb-32" ref={endOfMessagesRef} />
           </div>
         </div>
       </div>
-
     </div>
   );
 }

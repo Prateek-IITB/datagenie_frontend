@@ -5,6 +5,8 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
 import SchemaEditor from './pages/SchemaEditor';
 import Login from './pages/Login';
+import Settings from './pages/Settings'; // Adjust the path if it's different
+
 
 // ✅ NEW: Import ProtectedRoute
 import ProtectedRoute from './components/ProtectedRoute';
@@ -37,6 +39,17 @@ function App() {
 
         {/* ✅ Public: Login page */}
         <Route path="/login" element={<Login />} />
+        
+        
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
+
       </Routes>
     </Router>
   );

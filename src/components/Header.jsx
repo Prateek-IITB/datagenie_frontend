@@ -1,88 +1,277 @@
-// src/components/Header.jsx
-import React, { useState, useEffect } from 'react';
-import { FaUserCircle } from 'react-icons/fa';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useRef, useEffect, useState } from 'react';
+import axios from 'axios';
+import * as XLSX from 'xlsx';
+import QueryCard from '../components/QueryCard';
+import { Link } from 'react-router-dom';
+import Lottie from 'lottie-react';
+import thinkingAnimation from '../assets/thinkingAnimation.json';
+import { toast, Toaster } from 'react-hot-toast';
+import { FaBars, FaTimes } from 'react-icons/fa';
 
+const BASE_URL = process.env.REACT_APP_BACKEND_URL;
 
-function Header() {
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
+function Home() {
+  const [prompt, setPrompt] = useState('');
+  const [explanation, setExplanation] = useState('');
+  const [sql, setSql] = useState('');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [editingSqlMap, setEditingSqlMap] = useState({});
+  const [history, setHistory] = useState([]);
+  const [offset, setOffset] = useState(0);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [followUpContext, setFollowUpContext] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const endOfMessagesRef = useRef(null);
 
+  const user = JSON.parse(localStorage.getItem('datagenie_user') || '{}');
 
-  const user = JSON.parse(localStorage.getItem("datagenie_user"));
-
-  const handleLogout = () => {
-    localStorage.removeItem("datagenie_user");
-    navigate("/login");
+  const scrollToBottom = () => {
+    if (endOfMessagesRef.current) {
+      endOfMessagesRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
-  const toggleDropdown = () => {
-    setDropdownOpen(!dropdownOpen);
-  };
-
-  const closeDropdown = () => {
-    setDropdownOpen(false);
-  };
-
-  // Detect mobile
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+    if (hasStarted) {
+      scrollToBottom();
+    }
+  }, [history, hasStarted]);
+
+  const handleSubmit = async () => {
+    if (!prompt.trim()) return;
+    setHasStarted(true);
+    setLoading(true);
+
+    const user_id = user?.id;
+
+    const userMessage = {
+      id: Date.now(),
+      prompt,
+      explanation: '',
+      generated_sql: '',
+      rows: [],
+      loading: true,
+      failed: false,
+    };
+
+    setHistory((prev) => [...prev, userMessage]);
+    setPrompt('');
+
+    try {
+      const res = await axios.post(`${BASE_URL}/api/generate-sql`, {
+        prompt,
+        context: followUpContext,
+        user_id: user_id,
+      });
+
+      const { requires_schema, needs_sql, intent, explanation, sql, message } = res.data;
+
+      if (!requires_schema) {
+        const newContextEntry = { prompt, message };
+        setFollowUpContext(intent === 'fresh' ? [newContextEntry] : [...followUpContext, newContextEntry]);
+        setHistory((prev) =>
+          prev.map((item) =>
+            item.id === userMessage.id ? { ...item, explanation: message, generated_sql: '', rows: [], loading: false } : item
+          )
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (requires_schema && !needs_sql) {
+        const newContextEntry = { prompt, message };
+        setFollowUpContext(intent === 'fresh' ? [newContextEntry] : [...followUpContext, newContextEntry]);
+        setHistory((prev) =>
+          prev.map((item) =>
+            item.id === userMessage.id ? { ...item, explanation: message, generated_sql: '', rows: [], loading: false } : item
+          )
+        );
+        setLoading(false);
+        return;
+      }
+
+      const runRes = await axios.post(`${BASE_URL}/api/execute-sql`, {
+        sql,
+        user_id: user_id,
+      });
+
+      const newResult = {
+        ...userMessage,
+        explanation,
+        generated_sql: sql,
+        rows: runRes.data.rows || [],
+        loading: false,
+      };
+
+      setHistory((prev) =>
+        prev.map((item) => (item.id === userMessage.id ? newResult : item))
+      );
+
+      const newContextEntry = { prompt, sql, result: runRes.data.rows || [] };
+      setFollowUpContext(intent === 'fresh' ? [newContextEntry] : [...followUpContext, newContextEntry]);
+    } catch (err) {
+      console.error('❌ Failed to process query:', err);
+      setHistory((prev) =>
+        prev.map((item) =>
+          item.id === userMessage.id
+            ? { ...item, loading: false, failed: true }
+            : item
+        )
+      );
+      toast.error('Failed to process query. Please try again.');
+    }
+
+    setLoading(false);
+  };
+
+  const handleReRun = async (editedSql, oldId) => {
+    if (!editedSql.trim()) return;
+    setLoading(true);
+    try {
+      const res = await axios.post(`${BASE_URL}/api/execute-sql`, {
+        sql: editedSql,
+        user_id: user?.id,
+      });
+      const newId = Date.now();
+      const oldItem = history.find((item) => item.id === oldId);
+      const newQuery = {
+        id: newId,
+        prompt: oldItem.prompt,
+        explanation: oldItem.explanation,
+        generated_sql: editedSql,
+        rows: res.data.rows || [],
+        loading: false,
+        failed: false,
+      };
+      setHistory((prev) => [...prev, newQuery]);
+      setTimeout(() => {
+        document.getElementById(`query-card-${newId}`)?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+      toast.success('Query re-executed successfully');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to execute query.');
+    }
+    setLoading(false);
+  };
+
+  const renderSidebarButtons = () => {
+    switch (user?.role) {
+      case 'admin':
+        return (
+          <>
+            <button className="p-2 text-left hover:bg-gray-700 rounded">Query</button>
+            <button className="p-2 text-left hover:bg-gray-700 rounded">Review Requests</button>
+            <button className="p-2 text-left hover:bg-gray-700 rounded">Admin Panel</button>
+          </>
+        );
+      case 'analyst':
+        return (
+          <>
+            <button className="p-2 text-left hover:bg-gray-700 rounded">Query</button>
+            <button className="p-2 text-left hover:bg-gray-700 rounded">Verify Requests</button>
+          </>
+        );
+      case 'viewer':
+      default:
+        return (
+          <>
+            <button className="p-2 text-left hover:bg-gray-700 rounded">Query</button>
+            <button className="p-2 text-left hover:bg-gray-700 rounded">Submit for Review</button>
+          </>
+        );
+    }
+  };
 
   return (
-    <header className="sticky top-0 bg-gray-900 text-white shadow-md z-50 flex justify-between items-center px-6 py-4">
-      <div className="text-xl font-bold">DatanautAI</div>
-
-      <div className="flex items-center space-x-4 relative">
-           {location.pathname === "/" && user?.role !== "user" && (
-            <Link
-                to="/schema"
-                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition"
-            >
-                Check Schema
-            </Link>
-            )}
-
-            {location.pathname === "/schema" && user?.role !== "user" &&(
-            <Link
-                to="/"
-                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition"
-            >
-                Back to Query
-            </Link>
-            )}
-
-        <div className="relative">
-          <button onClick={toggleDropdown} className="flex items-center space-x-2">
-            <FaUserCircle className="text-2xl" />
-            {!isMobile && (
-              <span className="text-sm font-medium">{user?.user_name || 'User'}</span>
-            )}
+    <div className="dark hide-scrollbar h-screen flex">
+      {/* Sidebar */}
+      <div className={`bg-gray-800 text-white transition-all duration-300 p-4 ${sidebarOpen ? 'w-64' : 'w-16'} flex flex-col`}>
+        <div className="flex justify-between items-center mb-4">
+          {sidebarOpen && <h1 className="text-xl font-bold">DataGenie</h1>}
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-white">
+            {sidebarOpen ? <FaTimes /> : <FaBars />}
           </button>
+        </div>
+        <nav className="flex flex-col space-y-2">{renderSidebarButtons()}</nav>
+      </div>
 
-          {dropdownOpen && (
-            <div
-              className="absolute right-0 mt-2 w-48 bg-white text-black rounded-md shadow-lg py-2 z-50"
-              onMouseLeave={closeDropdown}
-            >
-
-              <button
-                onClick={handleLogout}
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-              >
-                Logout
-              </button>
-            </div>
+      {/* Main Content */}
+      <div className="hide-scrollbar overflow-auto flex-grow bg-gradient-to-br from-gray-100 to-white dark:from-gray-900 dark:to-gray-800 px-6 py-10 font-sans text-gray-800 dark:text-gray-100 relative">
+        <div className={`max-w-6xl mx-auto space-y-8 ${hasStarted ? 'pb-36 max-h-[80vh]' : 'h-[70vh] flex flex-col justify-center'}`}>
+          {!hasStarted && (
+            <h2 className="text-4xl font-bold text-center text-gray-800 dark:text-gray-100">
+              Ask me what do you want to know today?
+            </h2>
           )}
+
+          <div className={`${hasStarted ? 'fixed bottom-0 left-0 w-full px-6 py-6 backdrop-blur-md bg-transparent z-50' : 'mt-6 flex justify-center items-center'}`}>
+            <div className="w-full max-w-6xl mx-auto px-6">
+              <div className="relative w-full">
+                <input
+                  type="text"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                  placeholder="Ask me anything"
+                  className="w-full px-4 py-3 pr-12 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded-xl shadow-sm focus:ring-gray-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {history.map((q, i) => (
+              <div key={i} id={`query-card-${q.id}`} className="space-y-2">
+                <div className="flex justify-end">
+                  <div className="bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white px-5 py-3 text-[17px] rounded-xl max-w-xl">
+                    {q.prompt}
+                  </div>
+                </div>
+
+                {q.loading ? (
+                  <div className="flex justify-start">
+                    <Lottie
+                      animationData={thinkingAnimation}
+                      loop
+                      autoplay
+                      style={{ width: 200, height: 200 }}
+                    />
+                  </div>
+                ) : q.failed ? (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-800 text-gray-100 px-5 py-3 text-[17px] rounded-xl max-w-xl">
+                      Unable to get your data, can you be more specific of what data do you want?
+                    </div>
+                  </div>
+                ) : q.generated_sql ? (
+                  <QueryCard
+                    prompt={q.prompt}
+                    explanation={q.explanation}
+                    sql={editingSqlMap[q.id] ?? q.generated_sql}
+                    rows={q.rows}
+                    error={q.error}
+                    editable={true}
+                    onSqlChange={(newSql) => setEditingSqlMap({ ...editingSqlMap, [q.id]: newSql })}
+                    expanded={editingSqlMap[q.id] !== undefined && editingSqlMap[q.id] !== q.generated_sql}
+                    onReRun={() => handleReRun(editingSqlMap[q.id], q.id)}
+                  />
+                ) : (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-800 text-gray-100 px-5 py-3 rounded-xl shadow max-w-xl text-[17px]">
+                      {q.explanation}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            <div className="pb-32" ref={endOfMessagesRef} />
+          </div>
         </div>
       </div>
-    </header>
+    </div>
   );
 }
 
-export default Header;
+export default Home;

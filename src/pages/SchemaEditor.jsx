@@ -1,130 +1,110 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
-import Header from '../components/Header';
-const user = JSON.parse(localStorage.getItem("datagenie_user"));
-const isViewer = user?.role === "viewer";
 
-
-const BASE_URL = process.env.REACT_APP_BACKEND_URL;
-
-const currentUser = JSON.parse(localStorage.getItem('datagenie_user'));
-const user_id = currentUser?.id;
-
-
-function SchemaEditor() {
-  const [schema, setSchema] = useState([]);
-  const [saving, setSaving] = useState(false);
+const SchemaEditor = () => {
+  const [schemaData, setSchemaData] = useState({});
+  const [editedDescriptions, setEditedDescriptions] = useState({});
 
   useEffect(() => {
-    const refreshThenFetch = async () => {
-      try {
-        const user = JSON.parse(localStorage.getItem('datagenie_user'));
-        if (!user) return;
-
-        await axios.post(`${BASE_URL}/api/schema/refresh`, {
-          user_id: user.id,
-        });
-
-        await fetchSchema(user.id);
-      } catch (err) {
-        console.error('Error refreshing schema:', err);
-        alert('Failed to refresh schema');
-      }
-    };
-
-    refreshThenFetch();
+    fetchSchema();
   }, []);
 
-
-  const fetchSchema = async (user_id) => {
-  try {
-    const res = await axios.get(`${BASE_URL}/api/schema`, {
-      params: { user_id },
-    });
-    setSchema(res.data.schema || []);
-  } catch (err) {
-    console.error('Error fetching schema:', err);
-  }
-};
-
-
-  const handleDescriptionChange = (table_name, column_name, value) => {
-    setSchema(prev =>
-      prev.map(col =>
-        col.table_name === table_name && col.column_name === column_name
-          ? { ...col, description: value }
-          : col
-      )
-    );
+  const fetchSchema = async () => {
+    try {
+      const response = await axios.get('/api/schema/fetch-schema');
+      const groupedData = groupColumnsByTable(response.data);
+      setSchemaData(groupedData);
+    } catch (error) {
+      console.error('Error fetching schema:', error);
+    }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  const groupColumnsByTable = (data) => {
+    return data.reduce((acc, column) => {
+      const { table_name } = column;
+      if (!acc[table_name]) {
+        acc[table_name] = [];
+      }
+      acc[table_name].push(column);
+      return acc;
+    }, {});
+  };
+
+  const handleDescriptionChange = (columnId, description) => {
+    setEditedDescriptions((prev) => ({
+      ...prev,
+      [columnId]: description,
+    }));
+  };
+
+  const handleSaveDescriptions = async () => {
     try {
-      const payload = schema.map(({ table_name, column_name, description }) => ({
-        table_name,
-        column_name,
-        description: description || '',
+      const updates = Object.entries(editedDescriptions).map(([columnId, description]) => ({
+        column_id: columnId,
+        description,
       }));
 
-      await axios.post(`${BASE_URL}/api/schema/save-descriptions`, {
-        params: {user_id},
-        data: payload,
-      });
-      alert('Descriptions saved!');
-    } catch (err) {
-      console.error('Failed to save schema descriptions:', err);
-      alert('Error saving descriptions');
+      await axios.post('/api/schema/save-descriptions', { updates });
+      alert('Descriptions saved successfully!');
+      fetchSchema(); // refresh
+    } catch (error) {
+      console.error('Error saving descriptions:', error);
+      alert('Failed to save descriptions.');
     }
-    setSaving(false);
   };
 
-  const grouped = schema.reduce((acc, col) => {
-    if (!acc[col.table_name]) acc[col.table_name] = [];
-    acc[col.table_name].push(col);
-    return acc;
-  }, {});
-
   return (
-    <div className="dark">
-      {/* Sticky Header */}
- 
-      <Header />
+    <div className="flex min-h-screen bg-gray-900 text-white">
+      {/* Sidebar */}
+      <div className="w-64 bg-gray-800 h-screen p-6">
+        <h1 className="text-2xl font-bold mb-8">DataGenie</h1>
+        <nav className="space-y-4">
+          <Link
+            to="/"
+            className="block px-4 py-2 rounded hover:bg-gray-700 transition"
+          >
+            Query
+          </Link>
+          <Link
+            to="/schema"
+            className="block px-4 py-2 rounded bg-gray-700 font-semibold"
+          >
+            Schema
+          </Link>
+        </nav>
+      </div>
 
-      {/* Body */}
-      <div className="min-h-screen bg-gradient-to-br from-gray-100 to-white dark:from-gray-900 dark:to-gray-800 px-6 py-10 font-sans text-gray-800 dark:text-gray-100">
-        <div className="max-w-6xl mx-auto space-y-8">
-        <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">
-  📝    Schema Annotation
-        </h1>
+      {/* Main content */}
+      <div className="flex-1 p-6 overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-6">Schema Editor</h2>
 
-
-          {Object.entries(grouped).map(([table, columns]) => (
-            <div key={table} className="mb-8 border rounded-xl p-4 shadow bg-white dark:bg-gray-800">
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">📦 {table}</h2>
-              <table className="w-full table-auto text-sm">
+        {Object.keys(schemaData).map((tableName) => (
+          <div key={tableName} className="mb-8">
+            <h3 className="text-xl font-semibold mb-3">{tableName}</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border border-gray-700 text-sm">
                 <thead>
-                  <tr className="bg-gray-100 dark:bg-gray-700 text-left text-xs uppercase text-gray-700 dark:text-gray-200">
-                    <th className="p-2">Column</th>
-                    <th className="p-2">Type</th>
-                    <th className="p-2">Description</th>
+                  <tr className="bg-gray-800">
+                    <th className="px-4 py-2 border border-gray-700 text-left">Column Name</th>
+                    <th className="px-4 py-2 border border-gray-700 text-left">Data Type</th>
+                    <th className="px-4 py-2 border border-gray-700 text-left">Description</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {columns.map(col => (
-                    <tr key={col.column_name} className="border-t dark:border-gray-700">
-                      <td className="p-2 font-medium text-gray-900 dark:text-white">{col.column_name}</td>
-                      <td className="p-2 text-gray-500 dark:text-gray-300">{col.data_type}</td>
-                      <td className="p-2">
+                  {schemaData[tableName].map((column) => (
+                    <tr key={column.id} className="hover:bg-gray-800">
+                      <td className="px-4 py-2 border border-gray-700">{column.column_name}</td>
+                      <td className="px-4 py-2 border border-gray-700">{column.data_type}</td>
+                      <td className="px-4 py-2 border border-gray-700">
                         <input
                           type="text"
-                          className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-900 text-gray-800 dark:text-white"
-                          placeholder="Describe this column..."
-                          value={col.description || ''}
+                          className="w-full bg-gray-700 text-white px-2 py-1 rounded border border-gray-600 focus:outline-none"
+                          value={editedDescriptions[column.id] ?? column.description ?? ''}
                           onChange={(e) =>
-                            handleDescriptionChange(col.table_name, col.column_name, e.target.value)
+                            handleDescriptionChange(column.id, e.target.value)
                           }
+                          placeholder="Enter description"
                         />
                       </td>
                     </tr>
@@ -132,23 +112,20 @@ function SchemaEditor() {
                 </tbody>
               </table>
             </div>
-          ))}
+          </div>
+        ))}
 
-           {!isViewer && (
-            <div className="text-right">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="bg-gray-700 hover:bg-gray-800 text-white px-5 py-2 rounded-md"
-              >
-                {saving ? 'Saving...' : 'Save Descriptions'}
-              </button>
-            </div>
-          )}
+        <div className="mt-6">
+          <button
+            onClick={handleSaveDescriptions}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
+          >
+            Save Descriptions
+          </button>
         </div>
       </div>
     </div>
   );
-}
+};
 
 export default SchemaEditor;
