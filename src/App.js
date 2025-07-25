@@ -1,58 +1,73 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
 
-// 🔁 Import your pages
+// Pages
 import Home from './pages/Home';
 import SchemaEditor from './pages/SchemaEditor';
+import Settings from './pages/Settings';
 import Login from './pages/Login';
-import Settings from './pages/Settings'; // Adjust the path if it's different
+
+//Admin Pages
+import AdminDashboard from './pages/admin/home';
+import ReviewRequests from './pages/admin/requests';
+import Security from './pages/admin/security';
+import ManageUsers from './pages/admin/manageUsers';
+import DataSources from './pages/admin/datasources';
+import Billing from './pages/admin/billing';
 
 
-// ✅ NEW: Import ProtectedRoute
+
+// Components
 import ProtectedRoute from './components/ProtectedRoute';
-
-
+import MainLayout from './components/MainLayout';
 
 function App() {
+  const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const userRole = localStorage.getItem("userRole");
+
   return (
     <Router>
+
+      {/* 👇 Paste ToastContainer here */}
+      <ToastContainer position="top-right" autoClose={3000} />
+
       <Routes>
-        {/* ✅ Protected: Main query UI */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
 
-        {/* ✅ Protected: Schema description */}
-        <Route
-          path="/schema"
-          element={
-            <ProtectedRoute>
-              <SchemaEditor />
-            </ProtectedRoute>
-          }
-        />
+  {/* ✅ Public Route */}
+  <Route path="/login" element={<Login />} />
 
-        {/* ✅ Public: Login page */}
-        <Route path="/login" element={<Login />} />
-        
-        
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          }
+  {/* ✅ Protected + All Pages Inside MainLayout */}
+  <Route
+    path="/"
+    element={
+      <ProtectedRoute>
+        <MainLayout
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          userRole={userRole}
         />
+      </ProtectedRoute>
+    }
+  >
+    {/* Business / Analyst Routes */}
+    <Route index element={<Home />} />
+    <Route path="schema" element={<SchemaEditor />} />
+    <Route path="settings" element={<Settings />} />
 
-      </Routes>
+    {/* Admin Routes */}
+    <Route path="admin/home" element={<AdminDashboard />} />
+    <Route path="admin/requests" element={<ReviewRequests />} />
+    <Route path="admin/security" element={<Security />} />
+    <Route path="admin/manageUsers" element={<ManageUsers />} />
+    <Route path="admin/datasources" element={<DataSources />} />
+    <Route path="admin/billing" element={<Billing />} />
+  </Route>
+
+</Routes>
     </Router>
   );
 }
+
 
 export default App;

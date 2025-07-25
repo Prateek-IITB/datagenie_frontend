@@ -25,7 +25,6 @@ function Home() {
   const endOfMessagesRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem('datagenie_user') || '{}');
-  console.log("use rin Home.jsx", user);
 
   const scrollToBottom = () => {
     if (endOfMessagesRef.current) {
@@ -148,7 +147,7 @@ function Home() {
   return (
     <div className="dark hide-scrollbar h-screen flex relative overflow-hidden">
       {/* Sidebar */}
-      <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} userRole={user?.role} />
+      {/* <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} userRole={user?.role} /> */}
 
       {/* Main Content */}
       <div className={`hide-scrollbar overflow-auto flex-grow bg-gradient-to-br from-gray-100 to-white dark:from-gray-900 dark:to-gray-800 px-6 py-10 font-sans text-gray-800 dark:text-gray-100 relative transition-all duration-300 ${sidebarOpen && window.innerWidth >= 768 ? 'ml-64' : 'ml-16'} md:ml-0`}>        
